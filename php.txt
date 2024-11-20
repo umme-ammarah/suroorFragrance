@@ -1,0 +1,104 @@
+<?php
+
+if (! defined('WP_DEBUG')) {
+	die( 'Direct access forbidden.' );
+}
+
+add_action( 'wp_enqueue_scripts', function () {
+	wp_enqueue_style( 'parent-style', get_template_directory_uri() . '/style.css' );
+
+    // Enqueue your custom script
+    wp_enqueue_script( 'custom-checkbox-limit', get_stylesheet_directory_uri() . '/js/custom-checkbox-limit.js', array(), null, true );
+});
+
+// Function to track the first 500 customers
+function suroor_fragrance_first_500_customers() {
+    // Get the current order count
+    $order_count = get_option('suroor_fragrance_order_count', 0);
+
+    // Check if the order count is below 500
+    if ($order_count < 500) {
+        return true; // Discount still applies
+    } else {
+        return false; // Discount does not apply
+    }
+}
+
+// Function to apply Rs. 250 discount for Perfumes category in the cart
+function suroor_fragrance_apply_cart_discount( $cart ) {
+    if ( is_admin() || ! is_cart() && ! is_checkout() ) {
+        return;
+    }
+
+    // Check if the customer is within the first 500 customers
+    if ( suroor_fragrance_first_500_customers() ) {
+        $discount = 0;
+        $applied_discount = false;
+
+        // Loop through cart items
+        foreach ( $cart->get_cart() as $cart_item_key => $cart_item ) {
+            $product = $cart_item['data'];
+            
+            // Check if the product belongs to the 'perfumes' category by slug
+            if ( has_term( 'perfumes', 'product_cat', $product->get_id() ) ) {
+                // Multiply Rs. 250 by the product quantity in the cart
+                $discount += 250 * $cart_item['quantity']; // Rs. 250 per item quantity
+                $applied_discount = true;
+            }
+        }
+
+        // Apply the discount if greater than 0
+        if ( $discount > 0 ) {
+            $cart->add_fee( __('Perfume Category Discount', 'woocommerce'), -$discount );
+
+            // Add a WooCommerce notice to notify the customer
+            if ( $applied_discount ) {
+                wc_add_notice( __( 'Congratulations! You got Rs. 250 more discount on each Perfume category product!', 'woocommerce' ), 'success' );
+            }
+        }
+    }
+}
+add_action( 'woocommerce_cart_calculate_fees', 'suroor_fragrance_apply_cart_discount' );
+
+// Update the order count after each successful order
+function suroor_fragrance_update_order_count( $order_id ) {
+    $order_count = get_option('suroor_fragrance_order_count', 0);
+    $order_count++;
+    update_option('suroor_fragrance_order_count', $order_count);
+}
+add_action( 'woocommerce_thankyou', 'suroor_fragrance_update_order_count' );
+
+// Custom script to limit checkbox selection
+function custom_checkbox_limit_script() {
+    ?>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const maxSelection = 5;
+        let checkboxes = document.querySelectorAll('.wcpa_checkbox input[type="checkbox"]');
+
+        checkboxes.forEach(function(checkbox) {
+            checkbox.addEventListener('change', function() {
+                // Count the number of checked checkboxes
+                let selectedCount = Array.from(checkboxes).filter(i => i.checked).length;
+
+                if (selectedCount >= maxSelection) {
+                    // Disable unchecked checkboxes if the selection limit is reached
+                    checkboxes.forEach(function(box) {
+                        if (!box.checked) {
+                            box.disabled = true;
+                        }
+                    });
+                    alert("You can only select up to " + maxSelection + " perfumes.");
+                } else {
+                    // Re-enable all checkboxes if the limit is not yet reached
+                    checkboxes.forEach(function(box) {
+                        box.disabled = false;
+                    });
+                }
+            });
+        });
+    });
+    </script>
+    <?php
+}
+add_action('wp_footer', 'custom_checkbox_limit_script');
